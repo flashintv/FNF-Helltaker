@@ -27,6 +27,7 @@ import flash.net.FileFilter;
 import haxe.Json;
 import DialogueBoxPsych;
 import lime.system.Clipboard;
+import helltakerUtils.HelltakerMenuItem;
 #if sys
 import sys.io.File;
 #end
@@ -45,16 +46,22 @@ class DialogueEditorState extends MusicBeatState
 	var defaultLine:DialogueLine;
 	var dialogueFile:DialogueFile = null;
 
+	var dialogueOptions:FlxTypedGroup<HelltakerMenuItem>;
 	override function create() {
 		persistentUpdate = persistentDraw = true;
 		FlxG.camera.bgColor = FlxColor.fromHSL(0, 0, 0.5);
 
 		defaultLine = {
+			className: 'default',
 			portrait: DialogueCharacter.DEFAULT_CHARACTER,
 			expression: 'talk',
 			text: DEFAULT_TEXT,
 			boxState: DEFAULT_BUBBLETYPE,
-			speed: 0.05
+			speed: 0.05,
+			option1: '',
+			option1Class: '',
+			option2: '',
+			option2Class: ''
 		};
 
 		dialogueFile = {
@@ -62,7 +69,7 @@ class DialogueEditorState extends MusicBeatState
 				copyDefaultLine()
 			]
 		};
-		
+
 		character = new DialogueCharacter();
 		character.scrollFactor.set();
 		add(character);
@@ -97,7 +104,11 @@ class DialogueEditorState extends MusicBeatState
 		animText.setFormat(Paths.font("vcr.ttf"), 24, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
 		animText.scrollFactor.set();
 		add(animText);
+
+		dialogueOptions = new FlxTypedGroup<HelltakerMenuItem>();
+		add(dialogueOptions);
 		changeText();
+
 		super.create();
 	}
 
@@ -107,7 +118,7 @@ class DialogueEditorState extends MusicBeatState
 			{name: 'Dialogue Line', label: 'Dialogue Line'},
 		];
 		UI_box = new FlxUITabMenu(null, tabs, true);
-		UI_box.resize(250, 190);
+		UI_box.resize(250, 310);
 		UI_box.x = FlxG.width - UI_box.width - 10;
 		UI_box.y = 10;
 		UI_box.scrollFactor.set();
@@ -117,15 +128,23 @@ class DialogueEditorState extends MusicBeatState
 	}
 
 	var characterInputText:FlxUIInputText;
+	var classInputText:FlxUIInputText;
 	var lineInputText:FlxUIInputText;
 	var angryCheckbox:FlxUICheckBox;
 	var speedStepper:FlxUINumericStepper;
+	var option1Text:FlxUIInputText;
+	var option2Text:FlxUIInputText;
+	var option1Class:FlxUIInputText;
+	var option2Class:FlxUIInputText;
 	function addDialogueLineUI() {
 		var tab_group = new FlxUI(null, UI_box);
 		tab_group.name = "Dialogue Line";
 
 		characterInputText = new FlxUIInputText(10, 20, 80, DialogueCharacter.DEFAULT_CHARACTER, 8);
 		blockPressWhileTypingOn.push(characterInputText);
+
+		classInputText = new FlxUIInputText(characterInputText.x + 120, characterInputText.y, 80, defaultLine.className, 8);
+		blockPressWhileTypingOn.push(classInputText);
 
 		speedStepper = new FlxUINumericStepper(10, characterInputText.y + 40, 0.005, 0.05, 0, 0.5, 3);
 
@@ -135,7 +154,7 @@ class DialogueEditorState extends MusicBeatState
 			updateTextBox();
 			dialogueFile.dialogue[curSelected].boxState = (angryCheckbox.checked ? 'angry' : 'normal');
 		};
-		
+
 		lineInputText = new FlxUIInputText(10, speedStepper.y + 45, 200, DEFAULT_TEXT, 8);
 		blockPressWhileTypingOn.push(lineInputText);
 
@@ -146,9 +165,21 @@ class DialogueEditorState extends MusicBeatState
 			saveDialogue();
 		});
 
+		option1Text = new FlxUIInputText(10, loadButton.y + 65, 90, defaultLine.option1, 8);
+		blockPressWhileTypingOn.push(option1Text);
+		option2Text = new FlxUIInputText(10, option1Text.y + 40, 90, defaultLine.option2, 8);
+		blockPressWhileTypingOn.push(option2Text);
+
+		option1Class = new FlxUIInputText(option1Text.x + option1Text.width + 20, option1Text.y, 90, defaultLine.option1Class, 8);
+		blockPressWhileTypingOn.push(option1Class);
+		option2Class = new FlxUIInputText(option2Text.x + option2Text.width + 20, option2Text.y, 90, defaultLine.option2Class, 8);
+		blockPressWhileTypingOn.push(option2Class);
+
 		tab_group.add(new FlxText(10, speedStepper.y - 18, 0, 'Interval/Speed (ms):'));
 		tab_group.add(new FlxText(10, characterInputText.y - 18, 0, 'Character:'));
 		tab_group.add(new FlxText(10, lineInputText.y - 18, 0, 'Text:'));
+		tab_group.add(new FlxText(classInputText.x, classInputText.y - 18, 0, 'Current Class:'));
+		tab_group.add(classInputText);
 		tab_group.add(characterInputText);
 		tab_group.add(angryCheckbox);
 		tab_group.add(speedStepper);
@@ -156,16 +187,29 @@ class DialogueEditorState extends MusicBeatState
 		tab_group.add(lineInputText);
 		tab_group.add(loadButton);
 		tab_group.add(saveButton);
+		tab_group.add(new FlxText(option1Text.x, option1Text.y - 18, 0, 'Option 1:'));
+		tab_group.add(new FlxText(option2Text.x, option2Text.y - 18, 0, 'Option 2:'));
+		tab_group.add(option1Text);
+		tab_group.add(option2Text);
+		tab_group.add(new FlxText(option1Class.x, option1Class.y - 18, 0, 'Next Class 1:'));
+		tab_group.add(new FlxText(option2Class.x, option2Class.y - 18, 0, 'Next Class 2:'));
+		tab_group.add(option1Class);
+		tab_group.add(option2Class);
 		UI_box.addGroup(tab_group);
 	}
 
 	function copyDefaultLine():DialogueLine {
 		var copyLine:DialogueLine = {
+			className: defaultLine.className,
 			portrait: defaultLine.portrait,
 			expression: defaultLine.expression,
 			text: defaultLine.text,
 			boxState: defaultLine.boxState,
-			speed: defaultLine.speed
+			speed: defaultLine.speed,
+			option1: defaultLine.option1,
+			option1Class: defaultLine.option1Class,
+			option2: defaultLine.option2,
+			option2Class: defaultLine.option2Class
 		};
 		return copyLine;
 	}
@@ -201,7 +245,7 @@ class DialogueEditorState extends MusicBeatState
 		switch(character.jsonFile.dialogue_pos) {
 			case 'right':
 				character.x = FlxG.width - character.width + DialogueBoxPsych.RIGHT_CHAR_X;
-			
+
 			case 'center':
 				character.x = FlxG.width / 2;
 				character.x -= character.width / 2;
@@ -252,6 +296,22 @@ class DialogueEditorState extends MusicBeatState
 		#end
 	}
 
+	function reloadOptions() {
+		var optionTexts:Array<String> = [option1Text.text, option2Text.text];
+		var optionClasses:Array<String> = [option1Class.text, option2Class.text];
+		var baseY:Float = (FlxG.height - (optionTexts.length * 60) - 35);
+		dialogueOptions.clear();
+		for (i in 0...2) {
+			if ((optionTexts[i] != '' && optionTexts[i] != null) && (optionClasses[i] != null && optionClasses[i] != '')) {
+				var option:HelltakerMenuItem = new HelltakerMenuItem(0, baseY + (i * 60), optionTexts[i]);
+				option.ID = i;
+				option.sprScreenCenter(X);
+				option.setAntialiasing(ClientPrefs.globalAntialiasing);
+				dialogueOptions.add(option);
+			}
+		}
+	}
+
 	override function getEvent(id:String, sender:Dynamic, data:Dynamic, ?params:Array<Dynamic>) {
 		if(id == FlxUIInputText.CHANGE_EVENT && (sender is FlxUIInputText)) {
 			if(sender == characterInputText) {
@@ -270,6 +330,16 @@ class DialogueEditorState extends MusicBeatState
 					characterAnimSpeed();
 				}
 				dialogueFile.dialogue[curSelected].portrait = characterInputText.text;
+			} else if(sender == option1Text) {
+				reloadOptions();
+				dialogueFile.dialogue[curSelected].option1 = option1Text.text;
+			} else if(sender == option2Text) {
+				reloadOptions();
+				dialogueFile.dialogue[curSelected].option2 = option2Text.text;
+			} else if(sender == option1Class) {
+				dialogueFile.dialogue[curSelected].option1Class = option1Class.text;
+			} else if(sender == option2Class) {
+				dialogueFile.dialogue[curSelected].option2Class = option2Class.text;
 			} else if(sender == lineInputText) {
 				reloadText(0);
 				dialogueFile.dialogue[curSelected].text = lineInputText.text;
@@ -370,9 +440,11 @@ class DialogueEditorState extends MusicBeatState
 					];
 				}
 				changeText();
+				reloadOptions();
 			} else if(FlxG.keys.justPressed.P) {
 				dialogueFile.dialogue.insert(curSelected + 1, copyDefaultLine());
 				changeText(1);
+				reloadOptions();
 			}
 		}
 		super.update(elapsed);
@@ -384,16 +456,22 @@ class DialogueEditorState extends MusicBeatState
 		else if(curSelected >= dialogueFile.dialogue.length) curSelected = 0;
 
 		var curDialogue:DialogueLine = dialogueFile.dialogue[curSelected];
+		classInputText.text = curDialogue.className;
 		characterInputText.text = curDialogue.portrait;
 		lineInputText.text = curDialogue.text;
 		angryCheckbox.checked = (curDialogue.boxState == 'angry');
 		speedStepper.value = curDialogue.speed;
+		option1Text.text = curDialogue.option1;
+		option2Text.text = curDialogue.option2;
+		option1Class.text = curDialogue.option1Class;
+		option2Class.text = curDialogue.option2Class;
 
 		curAnim = 0;
 		character.reloadCharacterJson(characterInputText.text);
 		reloadCharacter();
 		updateTextBox();
 		reloadText(curDialogue.speed);
+		reloadOptions();
 
 		var leLength:Int = character.jsonFile.animations.length;
 		if(leLength > 0) {

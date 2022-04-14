@@ -9,7 +9,10 @@ import flixel.input.FlxKeyManager;
 import flixel.text.FlxText;
 import flixel.util.FlxColor;
 import flixel.util.FlxTimer;
+import flixel.group.FlxGroup;
+import flixel.group.FlxGroup.FlxTypedGroup;
 import flixel.FlxSubState;
+import helltakerUtils.HelltakerMenuItem;
 import haxe.Json;
 import haxe.format.JsonParser;
 #if sys
@@ -44,11 +47,16 @@ typedef DialogueFile = {
 }
 
 typedef DialogueLine = {
+	var className:Null<String>;
 	var portrait:Null<String>;
 	var expression:Null<String>;
 	var text:Null<String>;
 	var boxState:Null<String>;
 	var speed:Null<Float>;
+	var option1:Null<String>;
+	var option1Class:Null<String>;
+	var option2:Null<String>;
+	var option2Class:Null<String>;
 	//var skipdelay:Null<Int>;
 	//var append:Null<Bool>; //thinkin bout having some rpg type text shit.
 }
@@ -102,7 +110,7 @@ class DialogueCharacter extends FlxSprite
 		var path:String = Paths.getPreloadPath(characterPath);
 		rawJson = Assets.getText(path);
 		#end
-		
+
 		jsonFile = cast Json.parse(rawJson);
 	}
 
@@ -159,8 +167,10 @@ class DialogueCharacter extends FlxSprite
 }
 
 // TO DO: Clean code? Maybe? idk
-class DialogueBoxPsych extends FlxSpriteGroup
+class DialogueBoxPsych extends FlxTypedSpriteGroup<Dynamic>
 {
+	public var selectedOpt:Int = 0;
+	var dialogueOptions:FlxTypedGroup<HelltakerMenuItem>;
 	var dialogue:Alphabet;
 	var dialogueList:DialogueFile = null;
 
@@ -187,7 +197,7 @@ class DialogueBoxPsych extends FlxSpriteGroup
 			FlxG.sound.playMusic(Paths.music(song), 0);
 			FlxG.sound.music.fadeIn(2, 0, 1);
 		}
-		
+
 		bgFade = new FlxSprite(-500, -500).makeGraphic(FlxG.width * 2, FlxG.height * 2, FlxColor.WHITE);
 		bgFade.scrollFactor.set();
 		bgFade.visible = true;
@@ -214,6 +224,10 @@ class DialogueBoxPsych extends FlxSpriteGroup
 		box.setGraphicSize(Std.int(box.width * 0.9));
 		box.updateHitbox();
 		add(box);
+
+		dialogueOptions = new FlxTypedGroup<HelltakerMenuItem>();
+		PlayState.instance.add(dialogueOptions);
+		dialogueOptions.cameras = [PlayState.instance.camOther];
 
 		startNextDialog();
 	}
@@ -273,6 +287,8 @@ class DialogueBoxPsych extends FlxSpriteGroup
 		}
 	}
 
+	private var skipThemBitches:Bool = false;
+	private var lastPickedClass:String = '';
 	public static var DEFAULT_TEXT_X = 90;
 	public static var DEFAULT_TEXT_Y = 430;
 	var scrollSpeed = 4500;
@@ -290,7 +306,44 @@ class DialogueBoxPsych extends FlxSpriteGroup
 			bgFade.alpha += 0.5 * elapsed;
 			if(bgFade.alpha > 0.5) bgFade.alpha = 0.5;
 
-			if(PlayerSettings.player1.controls.ACCEPT) {
+			if (!dialogueOpts.hasBeenUsed && dialogueOptions.members[0].text != '' && dialogueOptions.members[1].text != '') {
+				if (PlayerSettings.player1.controls.UI_UP_P) {
+					do {
+						selectedOpt--;
+						if (selectedOpt > 1)
+							selectedOpt = 0;
+						else if (selectedOpt < 0)
+							selectedOpt = 1;
+					} while(dialogueOptions.members[selectedOpt].text == '');
+				}
+				if (PlayerSettings.player1.controls.UI_DOWN_P) {
+					do {
+						selectedOpt++;
+						if (selectedOpt > 1)
+							selectedOpt = 0;
+						else if (selectedOpt < 0)
+							selectedOpt = 1;
+					} while(dialogueOptions.members[selectedOpt].text == '');
+				}
+
+				for (dialogueOption in dialogueOptions.members) {
+					if (dialogueOption.ID == selectedOpt) {
+						dialogueOption.selected = true;
+						switch (dialogueOption.ID) {
+							case 0:
+								lastPickedClass = dialogueOpts.option1Class;
+							case 1:
+								lastPickedClass = dialogueOpts.option2Class;
+							default:
+								lastPickedClass = '';
+						}
+					} else {
+						dialogueOption.selected = false;
+					}
+				}
+			}
+
+			if(PlayerSettings.player1.controls.ACCEPT || skipThemBitches) {
 				if(!daText.finishedText) {
 					if(daText != null) {
 						daText.killTheTimer();
@@ -300,10 +353,17 @@ class DialogueBoxPsych extends FlxSpriteGroup
 					}
 					daText = new Alphabet(DEFAULT_TEXT_X, DEFAULT_TEXT_Y, textToType, false, true, 0.0, 0.7);
 					add(daText);
-					
+
 					if(skipDialogueThing != null) {
 						skipDialogueThing();
 					}
+					skipThemBitches = false;
+				} else if(!dialogueOpts.hasBeenUsed) {
+					dialogueOpts.hasBeenUsed = true;
+					for (dialogueOption in dialogueOptions) {
+						dialogueOption.setAlpha(0);
+					}
+					skipThemBitches = true;
 				} else if(currentText >= dialogueList.dialogue.length) {
 					dialogueEnded = true;
 					for (i in 0...textBoxTypes.length) {
@@ -324,8 +384,10 @@ class DialogueBoxPsych extends FlxSpriteGroup
 					daText = null;
 					updateBoxOffsets(box);
 					FlxG.sound.music.fadeOut(1, 0);
+					skipThemBitches = false;
 				} else {
-					startNextDialog();
+					startNextDialog(lastPickedClass);
+					skipThemBitches = false;
 				}
 				FlxG.sound.play(Paths.sound('dialogueClose'));
 			} else if(daText.finishedText) {
@@ -333,10 +395,20 @@ class DialogueBoxPsych extends FlxSpriteGroup
 				if(char != null && char.animation.curAnim != null && char.animationIsLoop() && char.animation.finished) {
 					char.playAnim(char.animation.curAnim.name, true);
 				}
+				for (dialogueOption in dialogueOptions.members) {
+					if (dialogueOption.getAlpha() != 1 && !dialogueOpts.hasBeenUsed && !(dialogueOption.text == '')) {
+						dialogueOption.setAlpha(1);
+					}
+				}
 			} else {
 				var char:DialogueCharacter = arrayCharacters[lastCharacter];
 				if(char != null && char.animation.curAnim != null && char.animation.finished) {
 					char.animation.curAnim.restart();
+				}
+				for (dialogueOption in dialogueOptions.members) {
+					if (dialogueOption.getAlpha() != 0) {
+						dialogueOption.setAlpha(0);
+					}
 				}
 			}
 
@@ -435,17 +507,29 @@ class DialogueBoxPsych extends FlxSpriteGroup
 				finishThing();
 				kill();
 			}
+
+			if (PlayState.instance.members.contains(dialogueOptions)) {
+				PlayState.instance.remove(dialogueOptions);
+			}
 		}
 		super.update(elapsed);
 	}
 
 	var lastCharacter:Int = -1;
 	var lastBoxType:String = '';
-	function startNextDialog():Void
+	var dialogueOpts:HelltakerOptions;
+	function startNextDialog(neededClass:String = ''):Void
 	{
 		var curDialogue:DialogueLine = null;
 		do {
 			curDialogue = dialogueList.dialogue[currentText];
+			if (currentText >= dialogueList.dialogue.length) {
+				skipThemBitches = true;
+				return;
+			} else if ((neededClass != '' && curDialogue.className != neededClass) && curDialogue.className != '') {
+				currentText++;
+				curDialogue = null;
+			}
 		} while(curDialogue == null);
 
 		if(curDialogue.text == null || curDialogue.text.length < 1) curDialogue.text = ' ';
@@ -506,6 +590,9 @@ class DialogueBoxPsych extends FlxSpriteGroup
 		}
 		currentText++;
 
+		dialogueOptions.clear();
+		dialogueOpts = new HelltakerOptions(dialogueOptions, curDialogue);
+
 		if(nextDialogueThing != null) {
 			nextDialogueThing();
 		}
@@ -531,7 +618,50 @@ class DialogueBoxPsych extends FlxSpriteGroup
 		} else {
 			box.offset.set(10, 0);
 		}
-		
+
 		if(!box.flipX) box.offset.y += 10;
+	}
+}
+
+// messy ass code got damn!!!!
+class HelltakerOptions
+{
+	public var hasBeenUsed:Bool = true;
+	// made for easier access :smile:
+	public var optionInfo:Array<Array<String>> = [];
+	public var option1:String = "";
+	public var option1Class:String = "";
+	public var option2:String = "";
+	public var option2Class:String = "";
+	public function new(group:FlxTypedGroup<HelltakerMenuItem>, currentDialogue:DialogueLine)
+	{
+		optionInfo = [[currentDialogue.option1, currentDialogue.option1Class], [currentDialogue.option2, currentDialogue.option2Class]];
+		this.option1 = currentDialogue.option1;
+		this.option1Class = currentDialogue.option1Class;
+		this.option2 = currentDialogue.option2;
+		this.option2Class = currentDialogue.option2Class;
+
+		var baseY:Float = (FlxG.height - (optionInfo.length * 60) - 35);
+		group.clear();
+
+		var spawnedDialogue:Int = 0;
+		for (i in 0...2) {
+			if ((optionInfo[i][0] != '' && optionInfo[i][0] != null) || (optionInfo[i][1] != null && optionInfo[i][1] != '')) {
+				var intYJump:Int = i; // eh i dont know if i can override "i" in this case and i wont try so :troll: so thats why this shit exists
+				if ((optionInfo[i][1] == '' || optionInfo[i][1] == null) && i == 0) intYJump = 1; // if second option is null make the second option on the bottom
+				var option:HelltakerMenuItem = new HelltakerMenuItem(0, baseY + (intYJump * 60), optionInfo[i][0]);
+				option.ID = i;
+				option.sprScreenCenter(X);
+				option.setAntialiasing(ClientPrefs.globalAntialiasing);
+				option.setAlpha(0);
+				group.add(option);
+
+				spawnedDialogue++;
+			}
+		}
+
+		if (spawnedDialogue > 0) {
+			hasBeenUsed = false;
+		}
 	}
 }

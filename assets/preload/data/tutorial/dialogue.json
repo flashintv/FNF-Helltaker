@@ -1,0 +1,40 @@
+{
+	"dialogue": [
+		{
+			"speed": 0.05,
+			"option1Class": "default",
+			"portrait": "bf",
+			"className": "default",
+			"option1": "",
+			"option2": "",
+			"boxState": "normal",
+			"option2Class": "default",
+			"expression": "talk",
+			"text": "hello my guy"
+		},
+		{
+			"speed": 0.05,
+			"option1Class": "death",
+			"portrait": "bf",
+			"className": "default",
+			"option1": "hi",
+			"option2": "HELLO SEX MACHINE BROKE",
+			"boxState": "normal",
+			"option2Class": "default",
+			"expression": "talk",
+			"text": "what u doin"
+		},
+		{
+			"speed": 0.05,
+			"option1Class": "default",
+			"portrait": "bf",
+			"className": "default",
+			"option1": "",
+			"option2": "",
+			"boxState": "normal",
+			"option2Class": "default",
+			"expression": "talk",
+			"text": "OH DEAR"
+		}
+	]
+}
